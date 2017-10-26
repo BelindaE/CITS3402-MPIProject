@@ -479,13 +479,13 @@ void matchClusters(float probability, char seedType, struct Combination combinat
     }
     int c = 0;
     for (n=0; n<L; n++){
-        if (clusterMap[0].m[n][L-1] > 0 && clusterMap[1].m[n][0]){
+        if (clusterMap[0].m[n][L-1] > 0 && clusterMap[1].m[n][0] > 0){
             if(seedType == 'b' && bondMap[0][n][L-1].right == 2) continue; // checking seeded bond between
             connected[0][c] = clusterMap[0].m[n][L-1];
             connected[1][c] = clusterMap[1].m[n][0];
             c++;
         }//R0
-        if (clusterMap[0].m[0][n] > 0 && clusterMap[2].m[L-1][n]){
+        if (clusterMap[0].m[0][n] > 0 && clusterMap[2].m[L-1][n] > 0){
             if(seedType == 'b' && bondMap[2][L-1][n].down == 2) continue;
             connected[0][c] = clusterMap[0].m[0][n] ;
             connected[1][c] = clusterMap[2].m[L-1][n];
