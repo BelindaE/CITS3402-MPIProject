@@ -595,12 +595,12 @@ void matchClusters(float probability, char seedType, struct Combination combinat
             {
                 for(int l = 0; l < k ; l++)
                 {
-                    if(clusterMap[0].m[j][m] == tempCluster[l] || clusterMap[1].m[j][m] == tempCluster[l] )
+                    if(clusterMap[0].m[j][m] == tempCluster[l] )
                     {
                         tempRows[j] = 1;
                         tempCols[m] = 1;
                     }
-                    if(clusterMap[2].m[j][m] == tempCluster[l] || clusterMap[3].m[j][m] == tempCluster[l])
+                    if(clusterMap[2].m[j][m] == tempCluster[l])
                     {
                         tempRows[j+L] = 1;
                         tempCols[m] = 1;
