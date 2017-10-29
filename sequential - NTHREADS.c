@@ -13,8 +13,8 @@
 //  run:      ./s seedType probability
 // this version changes the Node map back to a non-pointer to enable new seeded maps
 
-#define L 300            /* Linear edge dimension of map */
-#define NTHREADS 20
+#define L 16            /* Linear edge dimension of map */
+#define NTHREADS 4
 #define P L/NTHREADS
 #define N L*P          // total number of nodes in a single map
 
@@ -39,15 +39,10 @@ struct Stack{
 
 struct Clusters{
     int m[P][L];
+    int bRight[P];
+    int bDown[L];
 }clusterMap[NTHREADS];
 
-struct bonds{
-    int flag;               // occupied=1, unoccupied=0, already in a cluster=2+
-    int up;                 // (0=not visited,1=visited,2=all directions visited,-1=when parent node)
-    int down;
-    int left;
-    int right;
-}bondMap[NTHREADS][P][L];
 
 // Initialising the side arrays to 0-empty. Will be filled with clusterID numbers as they are found during the search/navigation.
 int upSide[L]={0};
@@ -172,11 +167,12 @@ void seedBond(double probability)
             if(j == 0){
                 map[i][j].left = 2;
             }
-            bondMap[thread_num][i][i].flag = map[i][j].flag;
-            bondMap[thread_num][i][i].up = map[i][j].up;
-            bondMap[thread_num][i][i].down = map[i][j].down;
-            bondMap[thread_num][i][i].left = map[i][j].left;
-            bondMap[thread_num][i][i].right = map[i][j].right;
+	    if(i == P -1){
+		clusterMap[thread_num].bDown[j] =  map[i][j].down;
+	    }
+	    if(j == L -1){
+		clusterMap[thread_num].bRight[j] =  map[i][j].right;
+	    }
         }
     }
     
@@ -454,7 +450,7 @@ void matchClusters(float probability, char seedType){
     for (n=0; n<NTHREADS; n++){
         for(int i = 0; i < P; i++){
             if (clusterMap[n].m[i][L-1] > 0 && clusterMap[n].m[i][0] >0){
-                if(seedType == 'b' && bondMap[n][i][L-1].right == 2) continue; // checking seeded bond between
+                if(seedType == 'b' && clusterMap[n].bRight[i] == 2) continue; // checking seeded bond between
                 connected[0][c] = clusterMap[n].m[i][L-1];
                 connected[1][c] = clusterMap[n].m[i][0];
                 c++;
@@ -462,13 +458,13 @@ void matchClusters(float probability, char seedType){
         }
         for(int i = 0; i < L; i++){
             if(n == NTHREADS-1 && clusterMap[0].m[0][i] > 0 && clusterMap[n].m[P-1][i] > 0){
-                if(seedType == 'b' && bondMap[n][P-1][i].down == 2) continue;
+                if(seedType == 'b' && clusterMap[n].bDown[i] == 2) continue; // checking seeded bond between
                 connected[0][c] = clusterMap[0].m[0][i] ;
                 connected[1][c] = clusterMap[n].m[P-1][i];
                 c++;
             }
             else if (clusterMap[n+1].m[0][i] > 0 && clusterMap[n].m[P-1][i] > 0){
-                if(seedType == 'b' && bondMap[n][L-1][i].down == 2) continue;
+                if(seedType == 'b' && clusterMap[n].bDown[i] == 2) continue; // checking seeded bond between
                 connected[0][c] = clusterMap[n+1].m[0][i] ;
                 connected[1][c] = clusterMap[n].m[P-1][i];
                 c++;
@@ -608,7 +604,6 @@ void matchClusters(float probability, char seedType){
 }
 
 void searchControl(double probability, char seedType){
-    int dfs;
     int i, j, k;
     
     int clusterID = 2;
@@ -624,7 +619,9 @@ void searchControl(double probability, char seedType){
                 for(int q = 0; q< L ; q++)
                 {
                     clusterMap[k].m[r][q] = 0;
+		    clusterMap[k].bDown[q] = 0;	
                 }
+		clusterMap[k].bRight[r] = 0;
             }
             if (seedType == 's') {
                 seedSite(probability);
@@ -639,7 +636,7 @@ void searchControl(double probability, char seedType){
                     for(i =0; i<P; i++){
                         thread_num=k;
 
-                        dfs = depthFirstSearch(i,j, clusterID);
+                        depthFirstSearch(i,j, clusterID);
                     }
                 }
 
@@ -688,7 +685,6 @@ int main(int argc, char *argv[]){
         struct timeval start, end;
         gettimeofday(&start, NULL);
         searchControl(p, seedType);
-
         matchClusters(p, seedType);
         gettimeofday(&end, NULL);
         delta = ((end.tv_sec  - start.tv_sec) * 1000000u +
