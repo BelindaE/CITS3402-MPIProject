@@ -46,8 +46,7 @@ int top = 0;
 int count = 0;
 bool popped = false;
 
-int idCounter[N*2] = {0};
-int idSpace[N*2] = {0};
+int idCounter[N*NTHREADS] = {0};
 
 /*      this functions seeds the map with occupied or unoccupied nodes depending on probability entered
  by the user and initialises all node variables with 0.
@@ -373,7 +372,6 @@ int depthFirstSearch(int i, int j, int clusterID, int thread_num, struct Node ma
         
     }
     idCounter[currentID] = count;
-    idSpace[currentID] = thread_num;
     return count;
     
 }
