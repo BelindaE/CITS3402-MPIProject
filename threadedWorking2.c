@@ -14,8 +14,8 @@
 //  run:      ./s seedType probability
 // this version changes the Node map back to a non-pointer to enable new seeded maps
 
-#define L 40            /* Linear edge dimension of map */
-#define NTHREADS 5
+#define L 16            /* Linear edge dimension of map */
+#define NTHREADS 4
 #define P L/NTHREADS
 #define N L*P          // total number of nodes in a single map
 
@@ -46,8 +46,6 @@ int top = 0;
 int count = 0;
 bool popped = false;
 
-int clusterID = 2;
-int currentID;
 int idCounter[N*2] = {0};
 int idSpace[N*2] = {0};
 
@@ -85,7 +83,6 @@ void seedSite(double probability, int thread_num, struct Node map[P][L])
             map[i][j].x = j;
             map[i][j].y = i;
             /*the following indicates that the top row of the group need not search up, and the bottom not search down, likewise left column need not search left or right column search right.*/
-            printf("%d",map[i][j].flag);
             if(i==0){
                 map[i][j].up = 2;
             }
@@ -99,9 +96,7 @@ void seedSite(double probability, int thread_num, struct Node map[P][L])
                 map[i][j].right = 2;
             }
         }
-        printf("\n");
     }
-    printf("\n");
 }
 
 void seedBond(double probability, int thread_num, struct Node map[P][L], struct Clusters clusterMap[NTHREADS])
@@ -151,12 +146,12 @@ void seedBond(double probability, int thread_num, struct Node map[P][L], struct 
             if(j == 0){
                 map[i][j].left = 2;
             }
-	    if(i == P -1){
-		clusterMap[thread_num].bDown[j] =  map[i][j].down;
-	    }
-	    if(j == L -1){
-		clusterMap[thread_num].bRight[j] =  map[i][j].right;
-	    }
+            if(i == P -1){
+                clusterMap[thread_num].bDown[j] =  map[i][j].down;
+            }
+            if(j == L -1){
+                clusterMap[thread_num].bRight[j] =  map[i][j].right;
+            }
         }
     }
     
@@ -244,7 +239,7 @@ void displayNode(){
 // determines next node in the cluster
 // if no more paths from the current node returns previous node
 
-struct Node getNextNode(int thread_num, struct Node map[P][L], struct Clusters clusterMap[NTHREADS]) {
+struct Node getNextNode(int thread_num, struct Node map[P][L], struct Clusters clusterMap[NTHREADS],int currentID) {
     popped = false;
     int j = peek().x ;
     int i = peek().y ;
@@ -303,7 +298,7 @@ struct Node getNextNode(int thread_num, struct Node map[P][L], struct Clusters c
     }
     
     else {
-
+        printf("CurrentID = %d\n",currentID);
         clusterMap[thread_num].m[peek().y][peek().x] = currentID;
         deadEnd(peek().y, peek().x, map);                    // changes path status to 2
         pop();
@@ -325,6 +320,7 @@ int depthFirstSearch(int i, int j, int clusterID, int thread_num, struct Node ma
     int tempX = 0;
     int tempY = 0;
     int tempC = 0;
+    int currentID = 0;
     
     if (map[i][j].flag == 0 || map[i][j].flag >1) return 0;
     // check origin flag before commencing DFS,
@@ -345,7 +341,7 @@ int depthFirstSearch(int i, int j, int clusterID, int thread_num, struct Node ma
         cluster[top].y = map[i][j].y;
         
         if(map[i][j].flag == 1){
-            map[i][j].flag = clusterID;
+            map[i][j].flag = clusterID + thread_num*L*P/2;
             //marking the node as both explored, and to which cluster of nodes it belongs-
             count++;         //will only update if there's a new filled node attached.
         }
@@ -355,20 +351,22 @@ int depthFirstSearch(int i, int j, int clusterID, int thread_num, struct Node ma
         tempY = cluster[top].y;
         tempC = currentID;
         
-        temp[0][0] = getNextNode(thread_num, map, clusterMap);                  // allocate new node coords
+        temp[0][0] = getNextNode(thread_num, map, clusterMap, currentID);                  // allocate new node coords
         i = temp[0][0].y;
         j = temp[0][0].x;
         int f = temp[0][0].flag;
+        printf("f = %d\n",f);
         
         if(tempC != f)
         {
-            clusterMap[thread_num].m[tempY][tempX] = f;
-            currentID = f;
+            clusterMap[thread_num].m[tempY][tempX] = f + thread_num*L*P/2;
+            currentID = f + thread_num*L*P/2;
         }
         if(f != 1)
         {
-            clusterMap[thread_num].m[i][j] = f;
-            currentID = f;
+            clusterMap[thread_num].m[i][j] = f + thread_num*L*P/2;
+            currentID = f + thread_num*L*P/2;
+
         }
         
         if (!popped) ++top;            //want to go back to previous node if no connection made
@@ -388,32 +386,32 @@ void matchClusters(float probability, char seedType, int perc, struct Clusters c
     int both = 0;
     int connected[2][N*2];
     int biggestCluster[N*2] = {0};
-
-       int tempCluster[N*P/2] =  {0};
-        int k = 0;
-        int tempRows[L] = {0};
-        int tempCols[L] = {0};
-        int tempMax = 0;
-        int colP = 0;
-        int rowP = 0;
-
-		for (int i = 0; i < clusterID; i++){
-			printf("clusterID %i, count %i\n", i, idCounter[i]);
-		}
-		for (n = 0; n < NTHREADS; n++){
+    
+    int tempCluster[N*P/2] =  {0};
+    int k = 0;
+    int tempRows[L] = {0};
+    int tempCols[L] = {0};
+    int tempMax = 0;
+    int colP = 0;
+    int rowP = 0;
+    
+    /*for (int i = 0; i < clusterID; i++){
+        printf("clusterID %i, count %i\n", i, idCounter[i]);
+    }
+    for (n = 0; n < NTHREADS; n++){
       		for(int i = 0; i < L; i++){
-				printf("thread_num %i, clusterMap ID %i\n", n, clusterMap[n].m[i][L-1]);
-			}
-		}
-
+                printf("thread_num %i, clusterMap ID %i\n", n, clusterMap[n].m[i][L-1]);
+            }
+    }
+    */
     for(int i = 0; i<N*2;i++)
     {
         connected[0][i] = 0;
         connected[1][i] = 0;
     }
-
+    
     int c = 0;
-
+    
     for (n=0; n<NTHREADS; n++){
         for(int i = 0; i < P; i++){
             if (clusterMap[n].m[i][L-1] > 0 && clusterMap[n].m[i][0] >0){
@@ -438,17 +436,17 @@ void matchClusters(float probability, char seedType, int perc, struct Clusters c
             } //C2
         }
     }
-		for (int i = 0; i < clusterID; i++){
-			printf("connected ( %i, %i)\n", connected[0][i], connected[1][i]);
-		}
-
+    /*for (int i = 0; i < clusterID; i++){
+        printf("connected ( %i, %i)\n", connected[0][i], connected[1][i]);
+    }
+    */
     for(int i = 0; i < c ; i++)
     {
         if(connected[0][0] == 0 && i ==0)
         {
             break;
         }
-         for(int j = 0 ; j < c; j++)
+        for(int j = 0 ; j < c; j++)
         {
             if(tempCluster[0] == 0 && connected[0][j] !=0)
             {
@@ -558,16 +556,16 @@ void matchClusters(float probability, char seedType, int perc, struct Clusters c
     printf("Lattice size = %i x %i \n", L, L);
     printf("Number of threads = %i \n", NTHREADS);
     printf("Seeding type = %c, Probability = %f \n\n", seedType, probability);
-	printf("perc in matchClusters = %i\n", perc);
-	if (perc == 0) printf("columns percolated = %d \n", cols);
-	else if (perc == 1) printf("rows percolated = %d \n", rows);
-	else if (perc == 2) printf("both percolated = %d \n", both);
-	else {
-	    printf("columns percolated = %d \n", cols);
-    	printf("rows percolated = %d \n", rows);
-    	printf("both percolated = %d \n", both);
-	}
-
+    printf("perc in matchClusters = %i\n", perc);
+    if (perc == 0) printf("columns percolated = %d \n", cols);
+    else if (perc == 1) printf("rows percolated = %d \n", rows);
+    else if (perc == 2) printf("both percolated = %d \n", both);
+    else {
+        printf("columns percolated = %d \n", cols);
+        printf("rows percolated = %d \n", rows);
+        printf("both percolated = %d \n", both);
+    }
+    
     printf("Biggest Cluster = %d \n",max);
     
     
@@ -576,45 +574,46 @@ void matchClusters(float probability, char seedType, int perc, struct Clusters c
 
 void searchControl(int thread_num, double probability, char seedType, struct Node map[NTHREADS][P][L], struct Clusters clusterMap[NTHREADS]){
     int i, j, dfs;
+    int clusterID = 2;
     
-            for(int r = 0 ; r < P ; r++)
-            {
-                for(int q = 0; q< L ; q++)
-                {
-        	        clusterMap[thread_num].m[r][q] = 0;
-			    	clusterMap[thread_num].bDown[q] = 0;	
-                }
-				clusterMap[thread_num].bRight[r] = 0;
-            }
-            if (seedType == 's') {
-                seedSite(probability, thread_num, map[thread_num]);
-                //printSites();
-            }
-            else {
-                seedBond(probability, thread_num, map[thread_num], clusterMap);
-                //printBonds();
-            }
-            
-                for(j =0; j<L; j++){
-                    for(i =0; i<P; i++){
-                        dfs = depthFirstSearch(i,j, clusterID, thread_num, map[thread_num], clusterMap);
-						if (dfs>0) clusterID++;
-                    }
-                }
-
-            printf("Cluster Map %d\n",thread_num);
-
-            /*printf("Cluster Map %d\n",thread_num);
-            for(int r = 0 ; r < P ; r++)
-            {
-                for(int q = 0; q< L ; q++)
-                {
-                    printf("%d\t",clusterMap[thread_num].m[r][q]);
-                }
-                printf("\n");
-            }
-            printf("\n");*/
-
+    for(int r = 0 ; r < P ; r++)
+    {
+        for(int q = 0; q< L ; q++)
+        {
+            clusterMap[thread_num].m[r][q] = 0;
+            clusterMap[thread_num].bDown[q] = 0;
+        }
+        clusterMap[thread_num].bRight[r] = 0;
+    }
+    if (seedType == 's') {
+        seedSite(probability, thread_num, map[thread_num]);
+        //printSites();
+    }
+    else {
+        seedBond(probability, thread_num, map[thread_num], clusterMap);
+        //printBonds();
+    }
+    
+    for(j =0; j<L; j++){
+        for(i =0; i<P; i++){
+            dfs = depthFirstSearch(i,j, clusterID, thread_num, map[thread_num], clusterMap);
+            if (dfs>0) clusterID++;
+        }
+    }
+    
+    printf("Cluster Map %d\n",thread_num);
+    
+    /*printf("Cluster Map %d\n",thread_num);
+     for(int r = 0 ; r < P ; r++)
+     {
+     for(int q = 0; q< L ; q++)
+     {
+     printf("%d\t",clusterMap[thread_num].m[r][q]);
+     }
+     printf("\n");
+     }
+     printf("\n");*/
+    
 }
 
 int main(int argc, char *argv[]){
@@ -634,35 +633,49 @@ int main(int argc, char *argv[]){
     {
         char seedType = argv[1][0];			// enter 's' for site percolation, 'b' for bond percolation
         double p = atof(argv[2]);			// enter probability between 0 - 1, eg. 0.55
-		int perc = atoi(argv[3]);			// enter 0 = column percolation
-											//		 1 = row percolation
-											// 		 2 = both row and column percolation 
-											//       3 = see results for all three percolation types
-       
+        int perc = atoi(argv[3]);			// enter 0 = column percolation
+        //		 1 = row percolation
+        // 		 2 = both row and column percolation
+        //       3 = see results for all three percolation types
+        
         double delta;
         srand(time(NULL));                              //should only be called once
         
         struct timeval start, end;
         gettimeofday(&start, NULL);
-
-		struct Node map[NTHREADS][P][L];
-		struct Clusters clusterMap[NTHREADS];
-
+        
+        struct Node map[NTHREADS][P][L];
+        struct Clusters clusterMap[NTHREADS];
+        
         omp_set_num_threads(NTHREADS);
+        
+#pragma omp parallel
+        {
 
-            #pragma omp parallel
-			{
-			int thread_num = omp_get_thread_num();
-	        searchControl(thread_num, p, seedType, map, clusterMap);
-			}
+            int thread_num = omp_get_thread_num();
+                printf("threaded num = %d\n",thread_num);
+            searchControl(thread_num, p, seedType, map, clusterMap);
+        }
+        for(int i = 0; i < NTHREADS; i++){
+        printf("Cluster Map %d\n",i);
+        for(int r = 0 ; r < P ; r++)
+        {
+            for(int q = 0; q< L ; q++)
+            {
+                printf("%d\t",clusterMap[i].m[r][q]);
+            }
+            printf("\n");
+        }
+        printf("\n");
+        }
         matchClusters(p, seedType, perc, clusterMap);
-		printf("perc = %i\n", perc);
+        printf("perc = %i\n", perc);
         gettimeofday(&end, NULL);
         delta = ((end.tv_sec  - start.tv_sec) * 1000000u +
                  end.tv_usec - start.tv_usec) / 1.e6;
         printf("time=%12.10f\n",delta);
         
         return 0;
-		exit(EXIT_SUCCESS);
+        exit(EXIT_SUCCESS);
     }
 }
