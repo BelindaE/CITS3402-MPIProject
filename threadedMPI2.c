@@ -646,10 +646,17 @@ int main(int argc, char *argv[]){
         MPI_Init( &argc, &argv);
         MPI_Comm_size(MPI_COMM_WORLD, &numtasks);
         printf("numtask is %i \n", numtasks);
+
+		// not sure we need this //
+		if (numtasks % NTHREADS != 0) {
+			printf("Quitting. Number of MPI tasks must be divisible by number of maps.\n");
+			MPI_Abort(MPI_COMM_WORLD, rc);
+			exit(0);
+		}
+
         MPI_Comm_rank(MPI_COMM_WORLD, &taskid);
         printf("MPI task %d has started...\n", taskid);
-        
-        
+
         char seedType = argv[1][0];			// enter 's' for site percolation, 'b' for bond percolation
         double p = atof(argv[2]);			// enter probability between 0 - 1, eg. 0.55
         int perc = atoi(argv[3]);			// enter 0 = column percolation
@@ -677,6 +684,8 @@ int main(int argc, char *argv[]){
             MPI_Send(&clusterMap, 1, MPI_INT, dest, tag1, MPI_COMM_WORLD);
             MPI_Send(&idCounter, N, MPI_INT, dest, tag2, MPI_COMM_WORLD);
         }
+
+		// this has not been updated yet - we will need for threading file//
         #pragma omp parallel
         {
             
