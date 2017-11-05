@@ -11,9 +11,9 @@
 #define ANSI_COLOR_BLUE    "\x1b[34m"
 #define ANSI_COLOR_YELLOW  "\x1b[33m"
 
-//  compile:  mpicc -o myMPI threadedMPI.c
+//  compile:  mpicc -fopenmp -o myMPI threadedMPI.c
 //  run: syncCluster		/* needs to be run with every change to input file
-//  run: --hostfile host myMPI seedType probability percType
+//  run: mpirun --hostfile host myMPI seedType probability percType
 // depending on host file (every node at uwa has 12 processers per node - 1 for master)
 //
 
