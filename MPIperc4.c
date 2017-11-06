@@ -596,8 +596,8 @@ int main(int argc, char *argv[]){
                  end.tv_usec - start.tv_usec) / 1.e6;
         printf("time=%12.10f\n",delta);
 
-        free(clusterMap);
-        free(bRight);
+        free_array(clusterMap);
+        free_array(bRight);
         free(bDown);
         
         return 0;
