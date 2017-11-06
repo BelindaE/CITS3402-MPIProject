@@ -52,6 +52,7 @@ struct Stack{
 
 int top = 0;
 int count = 0;
+int clusterID = 2;
 bool popped = false;
 
 int idCounter[N*NTHREADS] = {0};
@@ -261,7 +262,7 @@ void displayNode(STACK *cluster){
 // determines next node in the cluster
 // if no more paths from the current node returns previous node
 
-NODE getNextNode(STACK * cluster, int thread_num, int currentID, int **clusterMap[]) {
+NODE getNextNode(STACK * cluster, int taskid, int currentID, int **clusterMap) {
     popped = false;
     int j = peek(cluster).x ;
     int i = peek(cluster).y ;
@@ -321,7 +322,7 @@ NODE getNextNode(STACK * cluster, int thread_num, int currentID, int **clusterMa
     
     else {
         printf("CurrentID = %d\n",currentID);
-        clusterMap[thread_num][peek(cluster).y][peek(cluster).x] = currentID;
+        clusterMap[peek(cluster).y][peek(cluster).x] = currentID;
         deadEnd(peek(cluster).y, peek(cluster).x);                    // changes path status to 2
         pop(cluster);
         // reduces top index by 1
@@ -337,7 +338,7 @@ NODE getNextNode(STACK * cluster, int thread_num, int currentID, int **clusterMa
 /*
  This searches on cluster of nodes
  */
-int depthFirstSearch(int i, int j, int clusterID, int thread_num, int **clusterMap[]){
+int depthFirstSearch(int i, int j, int clusterID, int taskid, int **clusterMap){
     //the cluster ID will be the reference point for the side-arrays, and cluster sizes.
     top = 0;
     int tempX = 0;
@@ -358,7 +359,7 @@ int depthFirstSearch(int i, int j, int clusterID, int thread_num, int **clusterM
     while(!isStackEmpty()){
         
         //initialise temporary holding stack
-        struct Node temp[1][1];
+        NODE temp[1][1];
         temp[0][0].x = 0;
         temp[0][0].y = 0;
         
@@ -366,7 +367,7 @@ int depthFirstSearch(int i, int j, int clusterID, int thread_num, int **clusterM
         cluster[top].y = map[i][j].y;
         
         if(map[i][j].flag == 1){
-            map[i][j].flag = clusterID + thread_num*L*P/2;
+            map[i][j].flag = clusterID + taskid*L*P/2;
             //marking the node as both explored, and to which cluster of nodes it belongs-
             count++;         //will only update if there's a new filled node attached.
         }
@@ -376,7 +377,7 @@ int depthFirstSearch(int i, int j, int clusterID, int thread_num, int **clusterM
         tempY = cluster[top].y;
         tempC = currentID;
         
-        temp[0][0] = getNextNode(cluster, thread_num, clusterMap, currentID);                  // allocate new node coords
+        temp[0][0] = getNextNode(cluster, taskid, currentID, clusterMap);                  // allocate new node coords
         i = temp[0][0].y;
         j = temp[0][0].x;
         int f = temp[0][0].flag;
@@ -384,13 +385,13 @@ int depthFirstSearch(int i, int j, int clusterID, int thread_num, int **clusterM
         
         if(tempC != f)
         {
-            clusterMap[thread_num][tempY][tempX] = f + thread_num*L*P/2;
-            currentID = f + thread_num*L*P/2;
+            clusterMap[tempY][tempX] = f + taskid*L*P/2;
+            currentID = f + taskid*L*P/2;
         }
         if(f != 1)
         {
-            clusterMap[thread_num][i][j] = f + thread_num*L*P/2;
-            currentID = f + thread_num*L*P/2;
+            clusterMap[i][j] = f + taskid*L*P/2;
+            currentID = f + taskid*L*P/2;
             
         }
         
@@ -413,12 +414,12 @@ void searchControlBond(int taskid, double p, char seedType, int **clusterMap, in
 
     for(j =0; j<L; j++){
     	for(i =0; i<P; i++){
-        	dfs = depthFirstSearch(i,j, clusterID, thread_num, clusterMap);
+        	dfs = depthFirstSearch(i,j, clusterID, taskid, clusterMap);
 				if (dfs>0) clusterID++;
         }
     }
 
-    printf("Cluster Map %d\n",thread_num);
+    printf("Cluster Map %d\n",taskid);
 
 
 }
@@ -429,7 +430,7 @@ void searchControlSite(int taskid, double p, char seedType, int **clusterMap, in
     seedSite(p);
     for(j =0; j<L; j++){
     	for(i =0; i<P; i++){
-        	dfs = depthFirstSearch(i,j, clusterID, thread_num, clusterMap);
+        	dfs = depthFirstSearch(i,j, clusterID, taskid, clusterMap);
 				if (dfs>0) clusterID++;
         }
     }
