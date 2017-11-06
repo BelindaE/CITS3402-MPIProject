@@ -22,8 +22,8 @@
 #define MAPSIZE L*L
 #define NTHREADS 1
 #define NPROCESSORS 12
-#define NODES 2
-#define threads 24
+#define NODES 1
+#define threads 12
 #define P L/threads    /* side length of single cluster map */
 #define N L*P          // total number of nodes in a single map
 #define MASTER 0
@@ -91,12 +91,25 @@ int *allocate_array(int length) {
     return array;
 }
 
-struct Node **allocate_map(int length){
+// modifies 1d array sent over mpi into a 2d array
+int **transform_array_toMap(int * array_1d) {
+    int i,j;
+    int **array= (int **)malloc(P*sizeof(int*));
+    for (i=0; i< P; i++){
+		for (j = 0; j < L; j++){
+        array[j] = &(array_1d[j]);
+		}
+    }
+    
+    return array;
+}
+
+NODE **allocate_map(int rows, int cols){
 	int i;
-    struct Node** map = (struct Node**) malloc(length*sizeof(struct Node*));
-	map[0] = (struct Node*)malloc(sizeof(struct Node)*length*length);
-	for (i = 0; i < length; ++i){
-		map[i] = (*map + length * i);
+    struct Node** map = (struct Node**) malloc(rows*sizeof(struct Node*));
+	map[0] = (struct Node*)malloc(sizeof(struct Node)*rows*cols);
+	for (i = 0; i < rows; ++i){
+		map[i] = (*map + cols * i);
 	}
 
 	return map;
@@ -110,21 +123,33 @@ void free_array(int** array, int size)
     {
         free(array[i]); // Free the memory allocated to each cell
     }
-    //free(array); // Free the matrix allocation
+    free(array); // Free the matrix allocation
+    //array = NULL; // Nullify the pointer
+}
+
+// Free every row of a 2D array
+void free_map(NODE** map, int size) 
+{
+    int i; 
+    for (i=0; i<size; i++) 
+    {
+        free(map[i]); // Free the memory allocated to each cell
+    }
+    free(map); // Free the matrix allocation
     //array = NULL; // Nullify the pointer
 }
 
 
 
-void seedSite(double probability)
+void seedSite(double probability, int taskid)
 {
     double r;
     int seeded;
     int i, j;
 
-    struct Node** map = allocate_map(L);
+    //map = allocate_map(P,L);
     
-    for (i = 0; i < P; i++){  	                    //rows
+    for (i = taskid*P; i < (taskid*P + P); i++){  	                    //rows
         for (j = 0; j < L; j++){                //columns
             
             map[i][j].flag = 0;				//reset flag to 0
@@ -147,10 +172,10 @@ void seedSite(double probability)
             map[i][j].x = j;
             map[i][j].y = i;
             /*the following indicates that the top row of the group need not search up, and the bottom not search down, likewise left column need not search left or right column search right.*/
-            if(i==0){
+            if(i==0 || i%P==0){
                 map[i][j].up = 2;
             }
-            else if(i == L-1){
+            else if(i == P-1 || i == (taskid*P + P -1)){
                 map[i][j].down = 2;
             }
             else if(j == 0){
@@ -169,16 +194,16 @@ void seedBond(double probability, int **bRight, int *bDown, int taskid)
     int seeded1, seeded2;
     int i, j, k;
 
-    struct Node** map = allocate_map(L);
+    //map = allocate_map(P,L);
 
-    for (i = 0; i < P; i++){  	                    //rows
+    for (i = taskid*P; i < (taskid*P + P); i++){  	                    //rows
         for (j = 0; j < L; j++){                //columns
             
             map[i][j].flag = 0;				//reset flag to 0
         }
     }
     
-    for (i = 0; i < P; i++){  	                    //rows
+    for (i = taskid*P; i < (taskid*P + P); i++){  	                    //rows
         for (j = 0; j < L; j++){                //columns
             
             r1 = (double)rand()/RAND_MAX*1.0;
@@ -206,13 +231,13 @@ void seedBond(double probability, int **bRight, int *bDown, int taskid)
             map[i][j].y = i;
             /*the following indicates that the top row of the group need not search up, and the bottom not search down, likewise left column need not search left or right column search right.*/
             
-            if(i==0){
+            if(i==0 || i%P==0){
                 map[i][j].up = 2;
             }
             if(j == 0){
                 map[i][j].left = 2;
             }
-            if(i == P -1){
+            if(i == P-1 || i == (taskid*P + P -1)){
                 bDown[taskid*P] =  map[i][j].down;
 				
             }
@@ -262,7 +287,7 @@ void displayNode(STACK *cluster){
 // determines next node in the cluster
 // if no more paths from the current node returns previous node
 
-NODE getNextNode(STACK * cluster, int taskid, int currentID, int **clusterMap) {
+NODE getNextNode(STACK * cluster, int taskid, int **clusterMap) {
     popped = false;
     int j = peek(cluster).x ;
     int i = peek(cluster).y ;
@@ -321,8 +346,8 @@ NODE getNextNode(STACK * cluster, int taskid, int currentID, int **clusterMap) {
     }
     
     else {
-        printf("CurrentID = %d\n",currentID);
-        clusterMap[peek(cluster).y][peek(cluster).x] = currentID;
+        //printf("CurrentID = %d\n",currentID);
+        clusterMap[peek(cluster).y][peek(cluster).x] = clusterID;
         deadEnd(peek(cluster).y, peek(cluster).x);                    // changes path status to 2
         pop(cluster);
         // reduces top index by 1
@@ -344,7 +369,6 @@ int depthFirstSearch(int i, int j, int clusterID, int taskid, int **clusterMap){
     int tempX = 0;
     int tempY = 0;
     int tempC = 0;
-    int currentID = 0;
     STACK* cluster = (STACK*) malloc(sizeof(STACK));
 	initialise_stack(cluster);
 
@@ -375,9 +399,9 @@ int depthFirstSearch(int i, int j, int clusterID, int taskid, int **clusterMap){
         push(cluster, cluster[top].y, cluster[top].x);                   // push node into the stack
         tempX = cluster[top].x;
         tempY = cluster[top].y;
-        tempC = currentID;
+        tempC = clusterID;
         
-        temp[0][0] = getNextNode(cluster, taskid, currentID, clusterMap);                  // allocate new node coords
+        temp[0][0] = getNextNode(cluster, taskid, clusterMap);                  // allocate new node coords
         i = temp[0][0].y;
         j = temp[0][0].x;
         int f = temp[0][0].flag;
@@ -386,13 +410,13 @@ int depthFirstSearch(int i, int j, int clusterID, int taskid, int **clusterMap){
         if(tempC != f)
         {
             clusterMap[tempY][tempX] = f + taskid*L*P/2;
-            currentID = f + taskid*L*P/2;
+            //currentID = f + taskid*L*P/2;
         }
         if(f != 1)
         {
             clusterMap[i][j] = f + taskid*L*P/2;
-            currentID = f + taskid*L*P/2;
-            
+            //currentID = f + taskid*L*P/2;
+           
         }
         
         if (!popped) ++top;            //want to go back to previous node if no connection made
@@ -400,16 +424,18 @@ int depthFirstSearch(int i, int j, int clusterID, int taskid, int **clusterMap){
     }
 
 	free(cluster);
-    idCounter[currentID] = count;
+    idCounter[clusterID-2] = count;
     return count;
     
 }
 
 
 
-void searchControlBond(int taskid, double p, char seedType, int **clusterMap, int **bRight, int *bDown){
+int * searchControlBond(int taskid, double p, char seedType, int *clusterArray, int **bRight, int *bDown){
 
-	int i, j, dfs;
+	int i, j, k, dfs;
+	int** clusterMap = transform_array_toMap(clusterArray);
+
     seedBond(p, bRight, bDown, taskid);
 
     for(j =0; j<L; j++){
@@ -421,19 +447,42 @@ void searchControlBond(int taskid, double p, char seedType, int **clusterMap, in
 
     printf("Cluster Map %d\n",taskid);
 
+	// return clusterArray to transfer back to master
+	k = 0;
+	for (i=0; i < P; i++){
+		for (j=0; j < L; j++){
+			clusterArray[k] = map[i][j].flag;
+			++k;
+		}
+	}
+	//free_map(map, P);
+	return clusterArray;
 
 }
 
-void searchControlSite(int taskid, double p, char seedType, int **clusterMap){
+int * searchControlSite(int taskid, double p, char seedType, int *clusterArray){
 
-	int i,j, dfs;
-    seedSite(p);
+	int i, j, k, dfs;
+	int** clusterMap = transform_array_toMap(clusterArray);
+
+    seedSite(p, taskid);
     for(j =0; j<L; j++){
     	for(i =0; i<P; i++){
         	dfs = depthFirstSearch(i,j, clusterID, taskid, clusterMap);
 				if (dfs>0) clusterID++;
         }
     }
+
+	// return clusterArray to transfer back to master
+	k = 0;
+	for (i=0; i < P; i++){
+		for (j=0; j < L; j++){
+			clusterArray[k] = map[i][j].flag;
+			++k;
+		}
+	}
+	//free_map(map, P);
+	return clusterArray;
 
 }            
 
@@ -484,9 +533,9 @@ int main(int argc, char *argv[]){
         
         int partition = L * L / numtasks;
 
-            // initialise the map array
-            int **clusterMap;
-            clusterMap = allocate_2d(L,L);
+            // initialise the map array  MPIperc5.c changes clustermap to a 1d array
+            int *clusterArray;
+            clusterArray = allocate_array(L*L);
             int **bRight;
             bRight = allocate_2d(threads,L);
             int *bDown;
@@ -500,10 +549,8 @@ int main(int argc, char *argv[]){
             // master keeps 1st part    
 
             for (dest=1; dest < numtasks; dest++){
-                //MPI_Send(&downOffset, 1, MPI_INT, dest, tag4, MPI_COMM_WORLD);
-                MPI_Send(&clusterMap[dest*P][0], partition , MPI_INT, dest, tag1, MPI_COMM_WORLD);
+                 MPI_Send(&clusterArray[dest*partition], partition , MPI_INT, dest, tag1, MPI_COMM_WORLD);
                 if(seedType == 'b'){
-	                //MPI_Send(&downOffset, 1, MPI_INT, dest, tag5, MPI_COMM_WORLD);
                     MPI_Send(&bDown[dest*P], P , MPI_INT, dest, tag2, MPI_COMM_WORLD);
                     MPI_Send(&bRight[dest][0], L , MPI_INT, dest, tag3, MPI_COMM_WORLD);
                 }
@@ -517,19 +564,17 @@ int main(int argc, char *argv[]){
             downOffset = 0;
             if (seedType == 'b') {
             //***note need to create new function***//
-             searchControlBond(taskid, p, seedType, clusterMap, bRight, bDown);
+             clusterArray = searchControlBond(taskid, p, seedType, clusterArray, bRight, bDown);
             } else {
-             searchControlSite(taskid, p, seedType, clusterMap);            
+             clusterArray = searchControlSite(taskid, p, seedType, clusterArray);            
             }
 
             /* Wait to receive results from each task */
 
             for (i=1; i<numtasks; i++) {
                 source = i;
-                //MPI_Recv(&offset, 1, MPI_INT, source, tag4, MPI_COMM_WORLD, &status);
-                MPI_Recv(&clusterMap[i*P][0], partition , MPI_INT, source, tag1, MPI_COMM_WORLD, &status);
+                MPI_Recv(&clusterArray[i*partition], partition , MPI_INT, source, tag1, MPI_COMM_WORLD, &status);
                 if(seedType == 'b'){
-	                //MPI_Recv(&downOffset, 1, MPI_INT, source, tag5, MPI_COMM_WORLD, &status);
                     MPI_Recv(&bDown[i*P], P , MPI_INT, source, tag2, MPI_COMM_WORLD, &status);
                     MPI_Recv(&bRight[i][0], L , MPI_INT, source, tag3, MPI_COMM_WORLD, &status);
                 }
@@ -541,13 +586,15 @@ int main(int argc, char *argv[]){
             // this has not been updated yet - we will need for threading file//
             int p , g;
             printf("MAP:\n");
-            for(p = 0; p<L; p++)
-            {
-                for(g = 0; g < L; g++){
-                    printf("%d",clusterMap[g][p]);
+                for(g = 0; g < L*L; g++){
+                    printf("%d",clusterArray[g]);
+					++p;
+					if (p == L) {
+						printf("\n");
+						p = 0;
+					}
                 }
                 printf("\n");
-            }
             printf("\n");
         } //end of master section
 
@@ -556,10 +603,8 @@ int main(int argc, char *argv[]){
         if (taskid > MASTER) {
             /* Receive my portion of array from the master task */
             source = MASTER;
-            //MPI_Recv(&offset, 1, MPI_INT, source, tag4, MPI_COMM_WORLD, &status);
-            MPI_Recv(&clusterMap[taskid*P][0], partition , MPI_INT, source, tag1, MPI_COMM_WORLD, &status);
+            MPI_Recv(&clusterArray[taskid*partition], partition , MPI_INT, source, tag1, MPI_COMM_WORLD, &status);
             if(seedType == 'b'){
-	            //MPI_Recv(&downOffset, 1, MPI_INT, source, tag5, MPI_COMM_WORLD, &status);
                 MPI_Recv(&bDown[taskid*P], P , MPI_INT, source, tag2, MPI_COMM_WORLD, &status);
                 MPI_Recv(&bRight[taskid][0], L , MPI_INT, source, tag3, MPI_COMM_WORLD, &status);
             }
@@ -567,9 +612,9 @@ int main(int argc, char *argv[]){
 
             if (seedType == 'b') {
             //***note need to create new function***//
-             searchControlBond(taskid, p, seedType, clusterMap, bRight, bDown);
+             clusterArray = searchControlBond(taskid, p, seedType, clusterArray, bRight, bDown);
             } else {
-             searchControlSite(taskid, p, seedType, clusterMap);            
+             clusterArray = searchControlSite(taskid, p, seedType, clusterArray);            
             }
 
     /*#pragma omp parallel num_threads(NTHREADS)
@@ -582,10 +627,8 @@ int main(int argc, char *argv[]){
             }
             // Send my results back to the master task */
             dest = MASTER;
-            //MPI_Send(&offset, 1, MPI_INT, dest, tag4, MPI_COMM_WORLD);
-            MPI_Send(&clusterMap[taskid*P][0], partition , MPI_INT, dest, tag1, MPI_COMM_WORLD);
+            MPI_Send(&clusterArray[taskid*partition], partition , MPI_INT, dest, tag1, MPI_COMM_WORLD);
             if(seedType == 'b'){
-	            //MPI_Send(&downOffset, 1, MPI_INT, dest, tag5, MPI_COMM_WORLD);
                 MPI_Send(&bDown[taskid*P], P , MPI_INT, dest, tag2, MPI_COMM_WORLD);
                 MPI_Send(&bRight[taskid][0], L , MPI_INT, dest, tag3, MPI_COMM_WORLD);
             }
@@ -604,7 +647,7 @@ int main(int argc, char *argv[]){
 
         MPI_Finalize();
 
-        free_array(clusterMap, L);
+        free(clusterArray);
         free_array(bRight, threads);
         free(bDown);
     
