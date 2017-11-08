@@ -586,21 +586,7 @@ void searchControl(int thread_num, double probability, char seedType, struct Nod
         seedBond(probability, thread_num, map, bRight, bDown, taskid);
         //printBonds();
     }
-    for(j = 0; j<P; j++)
-    {
-        for(i = 0; i<L; i++)
-        {
-            printf("%d",map[j][i].flag);
-        }
-        printf("\n");
-    }
-    for(j = 0; j<P; j++)
-    {
-        for(i = 0; i<L; i++)
-        {
-            clusterMap[j][i]= map[j][i].flag
-        }
-    }
+
     
     /*for(j =0; j<L; j++){
      for(i =0; i<P; i++){
@@ -716,17 +702,25 @@ int main(int argc, char *argv[]){
                 offset = offset + ntp;
             }
             
-            struct Node map[taskid][P][L];
+            struct Node map[P][L];
             omp_set_num_threads(NTHREADS);
 #pragma omp parallel
             {
                 
                 int thread_num = omp_get_thread_num();
                 printf("0. threaded num = %d\n",thread_num);
-                searchControl(thread_num, p, seedType, map[taskid], clusterMap, bRight, bDown, 0, taskid);
+                searchControl(thread_num, p, seedType, map, clusterMap, bRight, bDown, 0, taskid);
+                int i,j;
+                for(j = 0; j< P; j++)
+                {
+                    for(i = 0; i<L; i++)
+                    {
+                        clusterMap[j][i] = map[j][i].flag;
+                    }
+                    printf("\n");
+                }
             }
             /* Wait to receive results from each task */
-            
             for(i=1; i<numtasks; i++) {
                 source = i;
                 MPI_Recv(&offset, 1, MPI_INT, source, tag4, MPI_COMM_WORLD, &status);
@@ -774,14 +768,24 @@ int main(int argc, char *argv[]){
                 MPI_Recv(&bDown[taskid][0], P , MPI_INT, source, tag2, MPI_COMM_WORLD, &status);
                 MPI_Recv(&bRight[taskid][0], L , MPI_INT, source, tag3, MPI_COMM_WORLD, &status);
             }
-            struct Node map[taskid][P][L];
+            struct Node map[P][L];
             omp_set_num_threads(NTHREADS);
 #pragma omp parallel
             {
                 
                 int thread_num = omp_get_thread_num();
-                searchControl(thread_num, p, seedType, map[taskid], clusterMap, bRight, bDown , offset, taskid);
+                searchControl(thread_num, p, seedType, map, clusterMap, bRight, bDown , offset, taskid);
                 printf("1. thread num = %d\n", thread_num);
+                int i,j;
+                for(j = 0; j< P; j++)
+                {
+                    for(i = 0; i<L; i++)
+                    {
+                        clusterMap[j+offset][i] = map[j][i].flag;
+                    }
+                    printf("\n");
+                }
+                              
             }
             // Send my results back to the master task */
             dest = MASTER;
@@ -798,3 +802,4 @@ int main(int argc, char *argv[]){
         exit(EXIT_SUCCESS);
     }
 }
+
