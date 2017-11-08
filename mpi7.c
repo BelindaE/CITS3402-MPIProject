@@ -270,7 +270,7 @@ struct Node getNextNode(int thread_num, struct Node map[P][L], int clusterMap[][
 /*
  This searches on cluster of nodes
  */
-int depthFirstSearch(int i, int j, int clusterID, int thread_num, struct Node map[P][L], int clusterMap[][L], int bRight[][P], int bDown[][L] , int offset, int taskid, int idCounter[]){
+int depthFirstSearch(int i, int j, int clusterID, int thread_num, struct Node map[P][L], int clusterMap[][L], int bRight[][P], int bDown[][L] , int offset, int taskid, int idCounter[], int counterOffset){
     //the cluster ID will be the reference point for the side-arrays, and cluster sizes.
     top = 0;
     int tempX = 0;
@@ -314,12 +314,12 @@ int depthFirstSearch(int i, int j, int clusterID, int thread_num, struct Node ma
         
         if(tempC != f)
         {
-            clusterMap[offset + tempY][tempX] = f + offset*L;
+            clusterMap[offset + tempY][tempX] = f + counterOffset;
             currentID = f;
         }
         if(f != 1)
         {
-            clusterMap[offset + tempY][tempX] = f + offset*L;
+            clusterMap[offset + tempY][tempX] = f + counterOffset;
             currentID = f;
             
         }
@@ -327,7 +327,7 @@ int depthFirstSearch(int i, int j, int clusterID, int thread_num, struct Node ma
         if (!popped) ++top;            //want to go back to previous node if no connection made
         
     }
-    idCounter[currentID + offset*L] = count;
+    idCounter[currentID + counterOffset] = count;
     return count;
     
 }
@@ -530,7 +530,7 @@ void matchClusters(float probability, char seedType, int perc, int clusterMap[][
     printf("\n");
 }
 
-void searchControl(int thread_num, double probability, char seedType, struct Node map[P][L], int clusterMap[][L], int bRight[][P], int bDown[][L], int offset, int taskid, int idCounter[]){
+void searchControl(int thread_num, double probability, char seedType, struct Node map[P][L], int clusterMap[][L], int bRight[][P], int bDown[][L], int offset, int taskid, int idCounter[], int counterOffset){
     int i, j, dfs;
     int clusterID = 2;
     if (seedType == 's') {
@@ -545,7 +545,7 @@ void searchControl(int thread_num, double probability, char seedType, struct Nod
     
     for(j =0; j<L; j++){
         for(i =0; i<P; i++){
-            dfs = depthFirstSearch(i,j, clusterID, thread_num, map, clusterMap, bRight, bDown, offset, taskid, idCounter);
+            dfs = depthFirstSearch(i,j, clusterID, thread_num, map, clusterMap, bRight, bDown, offset, taskid, idCounter, counterOffset);
             if (dfs>0) clusterID++;
         }
     }
@@ -577,7 +577,7 @@ int main(int argc, char *argv[]){
         
         
         int numtasks;
-        int taskid, dest, source, offset, tag1, tag2, tag3, tag4, tag5, broadcast, rc;
+        int taskid, dest, source, offset, tag1, tag2, tag3, tag4, tag5, tag6, broadcast, rc;
         int j, i, g, m;
         
         double delta;
@@ -598,6 +598,7 @@ int main(int argc, char *argv[]){
         tag3 = 3;
         tag4 = 4;
         tag5 = 5;
+        tag6 = 6;
         // not sure we need this //
         /*if (L % (numtasks*NTHREADS -1) != 0)
          printf("Quitting. Number of MPI tasks must be divisible by number of maps.\n");
@@ -634,6 +635,7 @@ int main(int argc, char *argv[]){
 
         int ntp = L/numtasks;
         offset = ntp;
+	int counterOffset = MAPSIZE/numtasks;
         int partition = L * L / numtasks;
         if(taskid == MASTER) {
             
@@ -644,12 +646,14 @@ int main(int argc, char *argv[]){
             for(dest=1; dest < numtasks; dest++){
                 MPI_Send(&offset, 1, MPI_INT, dest, tag4, MPI_COMM_WORLD);
                 MPI_Send(&clusterMap[offset][0], partition , MPI_INT, dest, tag1, MPI_COMM_WORLD);
-                MPI_Send(&idCounter[offset*L*P], partition, MPI_INT, dest, tag5, MPI_COMM_WORLD);
+                MPI_Send(&counterOffset, 1, MPI_INT, dest, tag6, MPI_COMM_WORLD);
+                MPI_Send(&idCounter[counterOffset], partition, MPI_INT, dest, tag5, MPI_COMM_WORLD);
                 if(seedType == 'b'){
                     MPI_Send(&bDown[dest][0], L , MPI_INT, dest, tag2, MPI_COMM_WORLD);
                     MPI_Send(&bRight[dest][0], P , MPI_INT, dest, tag3, MPI_COMM_WORLD);
                 }
                 offset = offset + ntp;
+		counterOffset = counterOffset + partition;
             }
             
             struct Node map[P][L];
@@ -657,15 +661,17 @@ int main(int argc, char *argv[]){
             //#pragma omp parallel
             {
                 offset = 0;
+		counterOffset = 0;
                 int thread_num = omp_get_thread_num();
-                searchControl(thread_num, p, seedType, map, clusterMap, bRight, bDown, offset, taskid, idCounter);
+                searchControl(thread_num, p, seedType, map, clusterMap, bRight, bDown, offset, taskid, idCounter, counterOffset);
             }
             /* Wait to receive results from each task */
             for(i=1; i<numtasks; i++) {
                 source = i;
                 MPI_Recv(&offset, 1, MPI_INT, source, tag4, MPI_COMM_WORLD, &status);
                 MPI_Recv(&clusterMap[offset][0], partition , MPI_INT, source, tag1, MPI_COMM_WORLD, &status);
-                MPI_Recv(&idCounter[offset*L*P], partition , MPI_INT, source, tag5, MPI_COMM_WORLD, &status);
+                MPI_Recv(&counterOffset, 1, MPI_INT, source, tag6, MPI_COMM_WORLD, &status);
+                MPI_Recv(&idCounter[counterOffset], partition , MPI_INT, source, tag5, MPI_COMM_WORLD, &status);
                 if(seedType == 'b'){
                     MPI_Recv(&bDown[i][0], L , MPI_INT, source, tag2, MPI_COMM_WORLD, &status);
                     MPI_Recv(&bRight[i][0], P , MPI_INT, source, tag3, MPI_COMM_WORLD, &status);
@@ -695,7 +701,8 @@ int main(int argc, char *argv[]){
             source = MASTER;
             MPI_Recv(&offset, 1, MPI_INT, source, tag4, MPI_COMM_WORLD, &status);
             MPI_Recv(&clusterMap[offset][0], partition , MPI_INT, source, tag1, MPI_COMM_WORLD, &status);
-            MPI_Recv(&idCounter[offset*L*P], partition , MPI_INT, source, tag5, MPI_COMM_WORLD, &status);
+            MPI_Recv(&counterOffset, 1, MPI_INT, source, tag6, MPI_COMM_WORLD);
+            MPI_Recv(&idCounter[counterOffset], partition , MPI_INT, source, tag5, MPI_COMM_WORLD, &status);
             if(seedType == 'b'){
                 MPI_Recv(&bDown[taskid][0], L , MPI_INT, source, tag2, MPI_COMM_WORLD, &status);
                 MPI_Recv(&bRight[taskid][0], P , MPI_INT, source, tag3, MPI_COMM_WORLD, &status);
@@ -712,7 +719,8 @@ int main(int argc, char *argv[]){
             dest = MASTER;
             MPI_Send(&offset, 1, MPI_INT, dest, tag4, MPI_COMM_WORLD);
             MPI_Send(&clusterMap[offset][0], partition , MPI_INT, dest, tag1, MPI_COMM_WORLD);
-            MPI_Send(&idCounter[offset*L*P], partition , MPI_INT, dest, tag5, MPI_COMM_WORLD);
+            MPI_Send(&counterOffset, 1, MPI_INT, dest, tag6, MPI_COMM_WORLD);
+            MPI_Send(&idCounter[counterOffset], partition , MPI_INT, dest, tag5, MPI_COMM_WORLD);
             if(seedType == 'b'){
                 MPI_Send(&bDown[taskid][0], L , MPI_INT, dest, tag2, MPI_COMM_WORLD);
                 MPI_Send(&bRight[taskid][0], P , MPI_INT, dest, tag3, MPI_COMM_WORLD);
