@@ -1,4 +1,3 @@
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/time.h>
@@ -152,56 +151,11 @@ void seedBond(double probability, int thread_num, struct Node map[P][L], int bRi
                 bDown[taskid][j] =  map[i][j].down;
             }
             if(j == L -1){
-                bRight[taskid][j] =  map[i][j].right;
+                bRight[taskid][i] =  map[i][j].right;
             }
         }
     }
     
-}
-
-
-void printSites(struct Node map[P][L]){
-    int i,j;
-    for (i = 0; i < (L); i++){
-        for (j = 0; j < L; j++){
-            if (map[i][j].flag>0){
-                if (map[i][(j+1)%L].flag > 0) printf("%i ----- ", map[i][j].flag);
-                
-                else printf("%i\t", map[i][j].flag);
-            }
-            else printf("%i\t", map[i][j].flag);
-            
-        }
-        printf("\n");
-        for (j = 0; j < L; j++){
-            if (map[i][j].flag>0){
-                
-                if (map[(i+1)%L][j].flag >0) printf("|\t");
-                else printf("\t");
-            }
-            else printf("\t");
-        }
-        printf("\n");
-    }
-    printf("\n\n");
-}
-void printBonds(struct Node map[P][L]){
-    int i,j;
-    for (i = 0; i < (P); i++){
-        for (j = 0; j < L; j++){
-            if (map[i][j].right==0){
-                printf("%i ----- ", map[i][j].flag);
-            }
-            else printf("%i\t", map[i][j].flag);
-            
-        }
-        printf("\n");
-        for (j = 0; j < L; j++){
-            if (map[i][j].down==0) printf("|\t");
-            else printf("\t");
-        }
-        printf("\n");
-    }
 }
 
 
@@ -241,8 +195,6 @@ void displayNode(){
 
 // determines next node in the cluster
 // if no more paths from the current node returns previous node
-
-
 
 struct Node getNextNode(int thread_num, struct Node map[P][L], int clusterMap[][L] ,int currentID, int offset, int taskid, int bRight[][P], int bDown[][L]) {
     popped = false;
@@ -346,7 +298,7 @@ int depthFirstSearch(int i, int j, int clusterID, int thread_num, struct Node ma
         cluster[top].y = map[i][j].y;
         
         if(map[i][j].flag == 1){
-            map[i][j].flag = clusterID + thread_num*L*P/2;
+            map[i][j].flag = clusterID + taskid*L*P/2;
             //marking the node as both explored, and to which cluster of nodes it belongs-
             count++;         //will only update if there's a new filled node attached.
         }
@@ -387,10 +339,10 @@ void matchClusters(float probability, char seedType, int perc, int clusterMap[][
     int rows = 0;
     int cols = 0;
     int both = 0;
-    int connected[2][N*2];
-    int biggestCluster[N*2] = {0};
+    int connected[2][MAPSIZE];
+    int biggestCluster[MAPSIZE] = {0};
     
-    int tempCluster[N*P/2] =  {0};
+    int tempCluster[MAPSIZE/2] =  {0};
     int k = 0;
     int tempRows[L] = {0};
     int tempCols[L] = {0};
@@ -407,7 +359,7 @@ void matchClusters(float probability, char seedType, int perc, int clusterMap[][
      }
      }
      */
-    for(i = 0; i<N*2;i++)
+    for(i = 0; i<MAPSIZE;i++)
     {
         connected[0][i] = 0;
         connected[1][i] = 0;
@@ -588,7 +540,7 @@ void searchControl(int thread_num, double probability, char seedType, struct Nod
     }
 
     
-    /*for(j =0; j<L; j++){
+    for(j =0; j<L; j++){
      for(i =0; i<P; i++){
      dfs = depthFirstSearch(i,j, clusterID, thread_num, map, clusterMap, bRight, bDown, offset, taskid);
      if (dfs>0) clusterID++;
@@ -704,7 +656,7 @@ int main(int argc, char *argv[]){
             
             struct Node map[P][L];
             omp_set_num_threads(NTHREADS);
-#pragma omp parallel
+//#pragma omp parallel
             {
                 
                 int thread_num = omp_get_thread_num();
@@ -726,8 +678,8 @@ int main(int argc, char *argv[]){
                 MPI_Recv(&offset, 1, MPI_INT, source, tag4, MPI_COMM_WORLD, &status);
                 MPI_Recv(&clusterMap[offset][0], partition , MPI_INT, source, tag1, MPI_COMM_WORLD, &status);
                 if(seedType == 'b'){
-                    MPI_Recv(&bDown[dest][0], P , MPI_INT, source, tag2, MPI_COMM_WORLD, &status);
-                    MPI_Recv(&bRight[dest][0], L , MPI_INT, source, tag3, MPI_COMM_WORLD, &status);
+                    MPI_Recv(&bDown[i][0], L , MPI_INT, source, tag2, MPI_COMM_WORLD, &status);
+                    MPI_Recv(&bRight[i][0], P , MPI_INT, source, tag3, MPI_COMM_WORLD, &status);
                 }
                 
                 printf("Master received tasks from %d\n", source);
@@ -742,7 +694,7 @@ int main(int argc, char *argv[]){
             for(m = 0; m<L; m++)
             {
                 for(g = 0; g < L; g++){
-                    printf("%d",clusterMap[m][g]);
+                    printf("%d-",clusterMap[m][g]);
                 }
                 printf("\n");
             }
@@ -750,10 +702,6 @@ int main(int argc, char *argv[]){
             
             //matchClusters(p, seedType, perc, clusterMap, bRight, bDown);
             printf("perc = %i\n", perc);
-            gettimeofday(&end, NULL);
-            delta = ((end.tv_sec  - start.tv_sec) * 1000000u +
-                     end.tv_usec - start.tv_usec) / 1.e6;
-            printf("time=%12.10f\n",delta);
             
         } //end of master section
         
@@ -765,12 +713,12 @@ int main(int argc, char *argv[]){
             MPI_Recv(&offset, 1, MPI_INT, source, tag4, MPI_COMM_WORLD, &status);
             MPI_Recv(&clusterMap[offset][0], partition , MPI_INT, source, tag1, MPI_COMM_WORLD, &status);
             if(seedType == 'b'){
-                MPI_Recv(&bDown[taskid][0], P , MPI_INT, source, tag2, MPI_COMM_WORLD, &status);
-                MPI_Recv(&bRight[taskid][0], L , MPI_INT, source, tag3, MPI_COMM_WORLD, &status);
+                MPI_Recv(&bDown[taskid][0], L , MPI_INT, source, tag2, MPI_COMM_WORLD, &status);
+                MPI_Recv(&bRight[taskid][0], P , MPI_INT, source, tag3, MPI_COMM_WORLD, &status);
             }
             struct Node map[P][L];
             omp_set_num_threads(NTHREADS);
-#pragma omp parallel
+//#pragma omp parallel
             {
                 
                 int thread_num = omp_get_thread_num();
@@ -792,14 +740,21 @@ int main(int argc, char *argv[]){
             MPI_Send(&offset, 1, MPI_INT, dest, tag4, MPI_COMM_WORLD);
             MPI_Send(&clusterMap[offset][0], partition , MPI_INT, dest, tag1, MPI_COMM_WORLD);
             if(seedType == 'b'){
-                MPI_Send(&bDown[taskid][0], P , MPI_INT, dest, tag2, MPI_COMM_WORLD);
-                MPI_Send(&bRight[taskid][0], L , MPI_INT, dest, tag3, MPI_COMM_WORLD);
+                MPI_Send(&bDown[taskid][0], L , MPI_INT, dest, tag2, MPI_COMM_WORLD);
+                MPI_Send(&bRight[taskid][0], P , MPI_INT, dest, tag3, MPI_COMM_WORLD);
             }
             
         } /* end of non-master */
+
+		if (taskid == MASTER) {
+			matchClusters(p, seedType, perc, clusterMap, bRight, bDown);	
+            gettimeofday(&end, NULL);
+            delta = ((end.tv_sec  - start.tv_sec) * 1000000u +
+                     end.tv_usec - start.tv_usec) / 1.e6;
+            printf("time=%12.10f\n",delta);
+		}
         MPI_Finalize();
         return 0;
         exit(EXIT_SUCCESS);
     }
 }
-
