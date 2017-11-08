@@ -256,7 +256,7 @@ struct Node getNextNode(int thread_num, struct Node map[P][L], int clusterMap[][
     
     else {
         //printf("CurrentID = %d\n",currentID);
-        clusterMap[offset + peek().y][peek().x] = currentID;
+        clusterMap[offset + peek().y][peek().x] = currentID + offset*L*P/2;
         deadEnd(peek().y, peek().x, map);                    // changes path status to 2
         pop();
         // reduces top index by 1
@@ -298,7 +298,7 @@ int depthFirstSearch(int i, int j, int clusterID, int thread_num, struct Node ma
         cluster[top].y = map[i][j].y;
         
         if(map[i][j].flag == 1){
-            map[i][j].flag = clusterID + taskid*L*P/2;
+            map[i][j].flag = clusterID;
             //marking the node as both explored, and to which cluster of nodes it belongs-
             count++;         //will only update if there's a new filled node attached.
         }
@@ -315,13 +315,13 @@ int depthFirstSearch(int i, int j, int clusterID, int thread_num, struct Node ma
         
         if(tempC != f)
         {
-            clusterMap[offset + tempY][tempX] = f + taskid*L*P/2;
-            currentID = f + thread_num*L*P/2;
+            clusterMap[offset + tempY][tempX] = f + offset*L*P/2;
+            currentID = f;
         }
         if(f != 1)
         {
-            clusterMap[offset + tempY][tempX] = f + taskid*L*P/2;
-            currentID = f + thread_num*L*P/2;
+            clusterMap[offset + tempY][tempX] = f + offset*L*P/2;
+            currentID = f;
             
         }
         
@@ -480,7 +480,7 @@ void matchClusters(float probability, char seedType, int perc, int clusterMap[][
         if(rowP == 0) rows = 1;
         if(cols ==1 && rows == 1) both =1;
     }
-    for(g = 0; g< NTHREADS; g++)
+    for(g = 0; g< threads; g++)
     {
         for(i = 0; i < P; i++)
         {
@@ -538,27 +538,15 @@ void searchControl(int thread_num, double probability, char seedType, struct Nod
         seedBond(probability, thread_num, map, bRight, bDown, taskid);
         //printBonds();
     }
-
+    
     
     for(j =0; j<L; j++){
-     for(i =0; i<P; i++){
-     dfs = depthFirstSearch(i,j, clusterID, thread_num, map, clusterMap, bRight, bDown, offset, taskid);
-     if (dfs>0) clusterID++;
-     }
-     }
+        for(i =0; i<P; i++){
+            dfs = depthFirstSearch(i,j, clusterID, thread_num, map, clusterMap, bRight, bDown, offset, taskid);
+            if (dfs>0) clusterID++;
+        }
+    }
     
-    printf("Cluster Map %d\n",thread_num);
-    
-    /*printf("Cluster Map %d\n",thread_num);
-     for(int r = 0 ; r < P ; r++)
-     {
-     for(int q = 0; q< L ; q++)
-     {
-     printf("%d\t",clusterMap[thread_num].m[r][q]);
-     }
-     printf("\n");
-     }
-     printf("\n");*/
     
 }
 
@@ -656,21 +644,11 @@ int main(int argc, char *argv[]){
             
             struct Node map[P][L];
             omp_set_num_threads(NTHREADS);
-//#pragma omp parallel
+            //#pragma omp parallel
             {
                 
                 int thread_num = omp_get_thread_num();
-                printf("0. threaded num = %d\n",thread_num);
                 searchControl(thread_num, p, seedType, map, clusterMap, bRight, bDown, 0, taskid);
-                int i,j;
-                for(j = 0; j< P; j++)
-                {
-                    for(i = 0; i<L; i++)
-                    {
-                        clusterMap[j][i] = map[j][i].flag;
-                    }
-                    printf("\n");
-                }
             }
             /* Wait to receive results from each task */
             for(i=1; i<numtasks; i++) {
@@ -682,7 +660,6 @@ int main(int argc, char *argv[]){
                     MPI_Recv(&bRight[i][0], P , MPI_INT, source, tag3, MPI_COMM_WORLD, &status);
                 }
                 
-                printf("Master received tasks from %d\n", source);
                 
             }
             
@@ -694,7 +671,7 @@ int main(int argc, char *argv[]){
             for(m = 0; m<L; m++)
             {
                 for(g = 0; g < L; g++){
-                    printf("%d-",clusterMap[m][g]);
+                    printf("%d",clusterMap[m][g]);
                 }
                 printf("\n");
             }
@@ -718,22 +695,12 @@ int main(int argc, char *argv[]){
             }
             struct Node map[P][L];
             omp_set_num_threads(NTHREADS);
-//#pragma omp parallel
+            //#pragma omp parallel
             {
                 
                 int thread_num = omp_get_thread_num();
                 searchControl(thread_num, p, seedType, map, clusterMap, bRight, bDown , offset, taskid);
-                printf("1. thread num = %d\n", thread_num);
-                int i,j;
-                for(j = 0; j< P; j++)
-                {
-                    for(i = 0; i<L; i++)
-                    {
-                        clusterMap[j+offset][i] = map[j][i].flag;
-                    }
-                    printf("\n");
-                }
-                              
+                
             }
             // Send my results back to the master task */
             dest = MASTER;
@@ -745,14 +712,14 @@ int main(int argc, char *argv[]){
             }
             
         } /* end of non-master */
-
-		if (taskid == MASTER) {
-			matchClusters(p, seedType, perc, clusterMap, bRight, bDown);	
+        
+        if (taskid == MASTER) {
+            matchClusters(p, seedType, perc, clusterMap, bRight, bDown);
             gettimeofday(&end, NULL);
             delta = ((end.tv_sec  - start.tv_sec) * 1000000u +
                      end.tv_usec - start.tv_usec) / 1.e6;
             printf("time=%12.10f\n",delta);
-		}
+        }
         MPI_Finalize();
         return 0;
         exit(EXIT_SUCCESS);
